@@ -1,6 +1,10 @@
 name: Run Fund Daily View
 
 on:
+  schedule:
+    # 每天北京时间下午六点 (UTC+8) = UTC 上午十点
+    - cron: '0 10 * * *'
+  
   workflow_dispatch:
     inputs:
       mode:
