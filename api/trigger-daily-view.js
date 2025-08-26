@@ -122,10 +122,11 @@ async function fetchLatestDailyData() {
     const results = data.results || [];
 
     if (results.length === 0) {
-      console.log('No records found in daily data table');
+      console.log('No records found in daily data table, fetching current holdings data');
+      const holdingProfit = await fetchCurrentHoldingProfit();
       return {
         dailyProfit: 0,
-        holdingProfit: 0,
+        holdingProfit: holdingProfit,
         totalProfit: 0,
         totalCost: 0,
         updateTime: new Date().toLocaleString('zh-CN')
@@ -140,8 +141,8 @@ async function fetchLatestDailyData() {
     const totalCost = getNumberValue(properties['持仓成本']) || 0;
     const totalProfit = getNumberValue(properties['总收益']) || 0;
     
-    // 持有收益 = 总收益 - 当日收益（这是累计的持有收益）
-    const holdingProfit = totalProfit - dailyProfit;
+    // 从持仓表获取真实的持有收益
+    const holdingProfit = await fetchCurrentHoldingProfit();
 
     // 获取记录的创建时间或日期字段
     const updateTime = record.created_time ? 
@@ -158,14 +159,90 @@ async function fetchLatestDailyData() {
 
   } catch (error) {
     console.error('Error fetching from Notion:', error);
-    // 返回默认数据而不是抛出错误
-    return {
-      dailyProfit: 0,
-      holdingProfit: 0,
-      totalProfit: 0,
-      totalCost: 0,
-      updateTime: new Date().toLocaleString('zh-CN')
-    };
+    // 尝试至少获取持有收益
+    try {
+      const holdingProfit = await fetchCurrentHoldingProfit();
+      return {
+        dailyProfit: 0,
+        holdingProfit: holdingProfit,
+        totalProfit: 0,
+        totalCost: 0,
+        updateTime: new Date().toLocaleString('zh-CN')
+      };
+    } catch (holdingError) {
+      console.error('Error fetching holding profit as fallback:', holdingError);
+      return {
+        dailyProfit: 0,
+        holdingProfit: 0,
+        totalProfit: 0,
+        totalCost: 0,
+        updateTime: new Date().toLocaleString('zh-CN')
+      };
+    }
+  }
+}
+
+// 从持仓表获取当前持有收益
+async function fetchCurrentHoldingProfit() {
+  const NOTION_TOKEN = process.env.NOTION_TOKEN;
+  const HOLDINGS_DB_ID = process.env.HOLDINGS_DB_ID;
+  
+  if (!NOTION_TOKEN || !HOLDINGS_DB_ID) {
+    console.log('Missing NOTION_TOKEN or HOLDINGS_DB_ID for holdings data');
+    return 0;
+  }
+
+  try {
+    let totalHoldingProfit = 0;
+    let cursor = null;
+    
+    do {
+      const payload = {
+        page_size: 100
+      };
+      
+      if (cursor) {
+        payload.start_cursor = cursor;
+      }
+
+      const response = await fetch(`https://api.notion.com/v1/databases/${HOLDINGS_DB_ID}/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${NOTION_TOKEN}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Holdings API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      for (const holding of results) {
+        const properties = holding.properties || {};
+        
+        // 检查持有份额是否大于0
+        const quantity = getNumberValue(properties['持有份额']) || 0;
+        
+        if (quantity > 0) {
+          // 获取持有收益
+          const holdingProfit = getNumberValue(properties['持有收益']) || 0;
+          totalHoldingProfit += holdingProfit;
+        }
+      }
+
+      cursor = data.next_cursor;
+    } while (cursor);
+
+    return Number(totalHoldingProfit.toFixed(2));
+
+  } catch (error) {
+    console.error('Error fetching holding profit:', error);
+    return 0;
   }
 }
 
