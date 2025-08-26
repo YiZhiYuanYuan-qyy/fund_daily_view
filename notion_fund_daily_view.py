@@ -35,7 +35,7 @@ HOLDING_GSZ_PROP = "估算净值"           # Number
 HOLDING_GSZZL_PROP = "估算涨跌幅"       # Number
 HOLDING_COST_PROP = "持仓成本"          # Number/Formula/Rollup
 HOLDING_POSITION_PROP = "仓位"          # Number
-HOLDING_QUANTITY_PROP = "持有份额"      # Number
+HOLDING_QUANTITY_PROP = "持仓份额"      # Number
 
 
 
@@ -168,15 +168,26 @@ def list_holdings_pages() -> List[dict]:
     """获取所有持仓页面"""
     pages = []
     cursor = None
+    page_count = 0
     while True:
         payload = {"page_size": 100}
         if cursor:
             payload["start_cursor"] = cursor
         data = notion_request("POST", f"/databases/{HOLDINGS_DB_ID}/query", payload)
-        pages.extend(data.get("results") or [])
+        batch = data.get("results") or []
+        pages.extend(batch)
+        page_count += 1
+        
+        # 调试：打印第一页的字段信息
+        if page_count == 1 and batch:
+            print(f"[DEBUG] 持仓表第一条记录的字段: {list(batch[0].get('properties', {}).keys())}")
+            print(f"[DEBUG] 共获取到 {len(batch)} 条持仓记录")
+        
         cursor = data.get("next_cursor")
         if not data.get("has_more"):
             break
+    
+    print(f"[DEBUG] 总共获取 {len(pages)} 条持仓记录")
     return pages
 
 
@@ -208,9 +219,9 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     
     print(f"[DEBUG] current_price={current_price}, daily_change_rate={daily_change_rate}, quantity={quantity}")
     
-    # 持有份额应该通过 Rollup 自动计算，如果为0可能是数据问题
+    # 持仓份额应该通过 Rollup 自动计算，如果为0可能是数据问题
     if quantity <= 0:
-        print(f"警告: {code} {name} 的持有份额为0，可能需要检查 Rollup 配置")
+        print(f"警告: {code} {name} 的持仓份额为0，可能需要检查 Rollup 配置")
     
     # 直接使用持仓表中的持仓成本
     total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))

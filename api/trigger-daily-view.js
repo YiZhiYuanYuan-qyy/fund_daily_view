@@ -225,8 +225,8 @@ async function fetchCurrentHoldingProfit() {
       for (const holding of results) {
         const properties = holding.properties || {};
         
-        // 检查持有份额是否大于0
-        const quantity = getNumberValue(properties['持有份额']) || 0;
+        // 检查持仓份额是否大于0
+        const quantity = getNumberValue(properties['持仓份额']) || 0;
         
         if (quantity > 0) {
           // 获取持有收益
