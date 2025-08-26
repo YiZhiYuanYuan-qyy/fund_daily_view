@@ -48,7 +48,7 @@ DAILY_DATA_TITLE_PROP = "日期"          # Title
 DAILY_DATA_DAILY_PROFIT_PROP = "当日收益"   # Number
 DAILY_DATA_TOTAL_COST_PROP = "持仓成本"     # Number
 DAILY_DATA_TOTAL_PROFIT_PROP = "总收益"     # Number
-DAILY_DATA_TRADES_RELATION_PROP = "当日购买"  # Relation
+DAILY_DATA_TRADES_RELATION_PROP = "当日操作"  # Relation
 
 # 流水表字段（需要读取）
 TRADES_DB_ID = os.getenv("TRADES_DB_ID")
@@ -387,16 +387,38 @@ def test_date_matching():
         print("[WARN] 未设置 TRADES_DB_ID，跳过日期匹配测试")
         return
     
+    print(f"[TEST] 环境变量检查:")
+    print(f"  TRADES_DB_ID: {TRADES_DB_ID}")
+    print(f"  TRADES_BUY_DATE_PROP: {TRADES_BUY_DATE_PROP}")
+    
     # 测试今天的日期
     today = datetime.now(SG_TZ).date()
     test_date_str = f"@{today.isoformat()}"
     target_date = test_date_str.replace('@', '')
     
-    print(f"[TEST] 测试日期匹配:")
+    print(f"\n[TEST] 日期格式测试:")
     print(f"  每日数据表格式: {test_date_str}")
     print(f"  流水表查询格式: {target_date}")
     
+    # 先查询流水表的所有字段
+    try:
+        print(f"\n[TEST] 查询流水表结构...")
+        data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", {"page_size": 1})
+        if data.get("results"):
+            first_record = data["results"][0]
+            properties = first_record.get("properties", {})
+            print(f"[TEST] 流水表字段: {list(properties.keys())}")
+            
+            # 检查买入日期字段
+            buy_date_prop = properties.get(TRADES_BUY_DATE_PROP, {})
+            print(f"[TEST] 买入日期字段类型: {buy_date_prop.get('type', 'unknown')}")
+            print(f"[TEST] 买入日期字段值: {buy_date_prop}")
+    except Exception as exc:
+        print(f"[TEST] 查询流水表结构失败: {exc}")
+        return
+    
     # 查询流水表
+    print(f"\n[TEST] 查询当天交易记录...")
     payload = {
         "filter": {
             "property": TRADES_BUY_DATE_PROP,
@@ -418,7 +440,7 @@ def test_date_matching():
             print(f"[TEST] 记录 {i+1}: 买入日期 = {buy_date}")
             
     except Exception as exc:
-        print(f"[TEST] 测试失败: {exc}")
+        print(f"[TEST] 查询交易记录失败: {exc}")
 
 
 def update_daily_trades_relation(date_str: str, daily_data_page_id: str) -> None:
@@ -680,6 +702,12 @@ def update_all_holdings_profits() -> None:
         
         # 更新过去一周的交易关联
         update_week_trades_relations()
+        
+        # 直接测试今天的日期匹配
+        print("\n" + "="*60)
+        print("🔍 测试今天的日期匹配")
+        print("="*60)
+        test_date_matching()
         
     except Exception as exc:
         print(f"[ERR] 记录每日数据失败: {exc}")
