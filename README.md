@@ -75,7 +75,7 @@ python notion_fund_daily_view.py profit  # 计算所有基金收益
 - `日期` (Title) - 记录日期，格式如 @2024-01-15
 - `当日收益` (Number) - 当日收益金额
 - `持仓成本` (Number) - 总持仓成本
-- `总收益` (Number) - 总收益金额
+- `总收益` (Number) - 累计总收益（前一天总收益 + 当日收益）
 
 ## 🔧 计算逻辑
 
@@ -91,7 +91,7 @@ python notion_fund_daily_view.py profit  # 计算所有基金收益
 
 ### 总收益
 ```
-总收益 = 当日收益 + 持有收益
+总收益 = 前一天总收益 + 当日收益（累计收益）
 ```
 
 ### 收益率

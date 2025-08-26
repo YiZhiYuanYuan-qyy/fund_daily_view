@@ -255,11 +255,51 @@ def update_holding_profits(holding_id: str, profits: Dict[str, float]) -> None:
     )
 
 
-def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: float, total_profit: float) -> None:
+def get_previous_day_total_profit(current_date_str: str) -> float:
+    """获取前一天的总收益"""
+    if not DAILY_DATA_DB_ID:
+        return 0.0
+    
+    # 计算前一天的日期
+    from datetime import datetime, timedelta
+    current_date = datetime.fromisoformat(current_date_str.replace('@', ''))
+    previous_date = current_date - timedelta(days=1)
+    previous_date_str = f"@{previous_date.strftime('%Y-%m-%d')}"
+    
+    # 查询前一天的记录
+    payload = {
+        "filter": {
+            "property": DAILY_DATA_TITLE_PROP,
+            "title": {"equals": previous_date_str}
+        },
+        "page_size": 1
+    }
+    
+    try:
+        data = notion_request("POST", f"/databases/{DAILY_DATA_DB_ID}/query", payload)
+        results = data.get("results") or []
+        
+        if results:
+            props = results[0].get("properties") or {}
+            previous_total_profit = get_prop_number(props.get(DAILY_DATA_TOTAL_PROFIT_PROP))
+            return safe_float(previous_total_profit)
+        else:
+            print(f"[INFO] 未找到前一天({previous_date_str})的记录，总收益从0开始计算")
+            return 0.0
+            
+    except Exception as exc:
+        print(f"[WARN] 获取前一天总收益失败: {exc}")
+        return 0.0
+
+
+def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: float, previous_total_profit: float) -> None:
     """创建或更新每日数据表记录"""
     if not DAILY_DATA_DB_ID:
         print("[WARN] 未设置 DAILY_DATA_DB_ID，跳过每日数据记录")
         return
+    
+    # 计算累计总收益 = 前一天总收益 + 当日收益
+    cumulative_total_profit = previous_total_profit + daily_profit
     
     # 检查今日记录是否已存在
     payload = {
@@ -277,7 +317,7 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
         DAILY_DATA_TITLE_PROP: {"title": [{"text": {"content": date_str}}]},
         DAILY_DATA_DAILY_PROFIT_PROP: {"number": daily_profit},
         DAILY_DATA_TOTAL_COST_PROP: {"number": total_cost},
-        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": total_profit}
+        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": cumulative_total_profit}
     }
     
     if existing:
@@ -296,6 +336,8 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
             }
         )
         print(f"[DAILY] 创建每日数据: {date_str}")
+    
+    print(f"[DAILY] 累计总收益计算: 前一天({previous_total_profit:+.2f}) + 当日({daily_profit:+.2f}) = {cumulative_total_profit:+.2f}")
 
 
 def update_all_holdings_profits() -> None:
@@ -364,12 +406,16 @@ def update_all_holdings_profits() -> None:
     
     # 记录每日数据
     today = today_iso_date()
+    today_str = f"@{today}"
     try:
+        # 获取前一天的总收益
+        previous_total_profit = get_previous_day_total_profit(today_str)
+        
         create_or_update_daily_data(
-            date_str=f"@{today}",
+            date_str=today_str,
             daily_profit=round_decimal(summary['total_daily_profit'], 2),
             total_cost=round_decimal(summary['total_cost'], 2),
-            total_profit=round_decimal(summary['total_profit'], 2)
+            previous_total_profit=previous_total_profit
         )
     except Exception as exc:
         print(f"[ERR] 记录每日数据失败: {exc}")
