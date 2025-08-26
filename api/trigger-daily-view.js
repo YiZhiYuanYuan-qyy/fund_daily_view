@@ -25,19 +25,57 @@ export default async function handler(req, res) {
   }
   
   if (req.method === 'POST') {
-    // POST 请求触发数据更新（当 fund-sync 更新时调用）
+    // POST 请求触发 GitHub Actions 计算收益数据
     try {
-      // 这里可以触发重新计算或者直接返回成功
-      // 实际应用中，这个接口会被 fund-sync 的 webhook 调用
+      const { mode = 'profit' } = req.body;
+      
+      // 验证参数
+      const validModes = ['profit'];
+      if (!validModes.includes(mode)) {
+        return res.status(400).json({ 
+          error: 'Invalid mode. Must be one of: profit' 
+        });
+      }
+
+      // 调用 GitHub API 触发 Actions
+      const response = await fetch(
+        `https://api.github.com/repos/YiZhiYuanYuan-qyy/fund_daily_view/actions/workflows/run-daily-view.yml/dispatches`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Vercel-Trigger-DailyView'
+          },
+          body: JSON.stringify({
+            ref: 'main',
+            inputs: {
+              mode: mode
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('GitHub API error:', response.status, errorText);
+        return res.status(response.status).json({ 
+          error: 'Failed to trigger GitHub Actions',
+          details: errorText
+        });
+      }
+
+      console.log(`Successfully triggered daily view calculation with mode: ${mode}`);
       
       return res.status(200).json({
         success: true,
-        message: 'Dashboard data updated successfully',
+        message: 'Daily view calculation triggered successfully',
+        mode: mode,
         timestamp: new Date().toISOString()
       });
 
     } catch (error) {
-      console.error('Error updating dashboard data:', error);
+      console.error('Error triggering daily view calculation:', error);
       return res.status(500).json({ 
         error: 'Internal server error',
         message: error.message 

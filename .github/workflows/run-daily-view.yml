@@ -10,9 +10,6 @@ on:
         type: choice
         options:
           - profit
-  schedule:
-    # 每天下午3点运行（交易结束后）
-    - cron: '0 15 * * 1-5'
 
 jobs:
   calculate-profits:
