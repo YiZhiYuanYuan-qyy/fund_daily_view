@@ -188,9 +188,14 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     """计算单个基金的收益数据"""
     props = holding.get("properties") or {}
     
+    # 调试：打印所有可用的字段名
+    print(f"[DEBUG] 可用字段: {list(props.keys())}")
+    
     # 基本信息
     code = zpad6(get_prop_text(props.get(HOLDING_CODE_PROP)))
     name = get_prop_text(props.get(HOLDING_TITLE_PROP))
+    
+    print(f"[DEBUG] {code} {name}")
     
     # 当前市场数据
     current_price = safe_float(get_prop_number(props.get(HOLDING_GSZ_PROP)))
@@ -201,12 +206,16 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     position = safe_float(get_prop_number(props.get(HOLDING_POSITION_PROP)))
     quantity = safe_float(get_prop_number(props.get(HOLDING_QUANTITY_PROP)))
     
+    print(f"[DEBUG] current_price={current_price}, daily_change_rate={daily_change_rate}, quantity={quantity}")
+    
     # 持有份额应该通过 Rollup 自动计算，如果为0可能是数据问题
     if quantity <= 0:
         print(f"警告: {code} {name} 的持有份额为0，可能需要检查 Rollup 配置")
     
     # 直接使用持仓表中的持仓成本
     total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
+    
+    print(f"[DEBUG] total_cost={total_cost}")
     
     # 计算收益
     market_value = current_price * quantity
@@ -297,6 +306,12 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
     if not DAILY_DATA_DB_ID:
         print("[WARN] 未设置 DAILY_DATA_DB_ID，跳过每日数据记录")
         return
+    
+    print(f"[DEBUG] create_or_update_daily_data 参数:")
+    print(f"  date_str: {date_str}")
+    print(f"  daily_profit: {daily_profit}")
+    print(f"  total_cost: {total_cost}")
+    print(f"  previous_total_profit: {previous_total_profit}")
     
     # 计算累计总收益 = 前一天总收益 + 当日收益
     cumulative_total_profit = previous_total_profit + daily_profit
@@ -410,6 +425,12 @@ def update_all_holdings_profits() -> None:
     try:
         # 获取前一天的总收益
         previous_total_profit = get_previous_day_total_profit(today_str)
+        
+        print(f"[DEBUG] 准备写入每日数据:")
+        print(f"  日期: {today_str}")
+        print(f"  当日收益: {summary['total_daily_profit']}")
+        print(f"  持仓成本: {summary['total_cost']}")
+        print(f"  前一天总收益: {previous_total_profit}")
         
         create_or_update_daily_data(
             date_str=today_str,
