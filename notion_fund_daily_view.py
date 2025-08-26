@@ -199,14 +199,14 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     """计算单个基金的收益数据"""
     props = holding.get("properties") or {}
     
-    # 调试：打印所有可用的字段名
-    print(f"[DEBUG] 可用字段: {list(props.keys())}")
-    
     # 基本信息
     code = zpad6(get_prop_text(props.get(HOLDING_CODE_PROP)))
     name = get_prop_text(props.get(HOLDING_TITLE_PROP))
     
-    print(f"[DEBUG] {code} {name}")
+    # 调试：打印所有可用的字段名（只为第一条记录）
+    if not hasattr(calculate_fund_profits, '_debug_printed'):
+        print(f"[DEBUG] 可用字段: {list(props.keys())}")
+        calculate_fund_profits._debug_printed = True
     
     # 当前市场数据
     current_price = safe_float(get_prop_number(props.get(HOLDING_GSZ_PROP)))
@@ -217,16 +217,14 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     position = safe_float(get_prop_number(props.get(HOLDING_POSITION_PROP)))
     quantity = safe_float(get_prop_number(props.get(HOLDING_QUANTITY_PROP)))
     
-    print(f"[DEBUG] current_price={current_price}, daily_change_rate={daily_change_rate}, quantity={quantity}")
+    # 直接使用持仓表中的持仓成本
+    total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
+    
+    print(f"[DEBUG] {code} {name} | price={current_price} | rate={daily_change_rate} | quantity={quantity} | cost={total_cost}")
     
     # 持仓份额应该通过 Rollup 自动计算，如果为0可能是数据问题
     if quantity <= 0:
         print(f"警告: {code} {name} 的持仓份额为0，可能需要检查 Rollup 配置")
-    
-    # 直接使用持仓表中的持仓成本
-    total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
-    
-    print(f"[DEBUG] total_cost={total_cost}")
     
     # 计算收益
     market_value = current_price * quantity
