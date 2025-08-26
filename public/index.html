@@ -237,16 +237,19 @@
         }
         
         function formatCurrency(value) {
-            const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-            return sign + '¥' + Math.abs(value).toLocaleString('zh-CN', {
+            // 确保是数字类型
+            const numValue = Number(value);
+            const sign = numValue > 0 ? '+' : numValue < 0 ? '-' : '';
+            return sign + '¥' + Math.abs(numValue).toLocaleString('zh-CN', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
         }
         
         function getChangeClass(value) {
-            if (value > 0) return 'positive';
-            if (value < 0) return 'negative';
+            const numValue = Number(value);
+            if (numValue > 0) return 'positive';
+            if (numValue < 0) return 'negative';
             return 'neutral';
         }
         
