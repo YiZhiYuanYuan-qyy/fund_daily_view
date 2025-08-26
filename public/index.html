@@ -211,8 +211,7 @@
         }
         
         function updateDashboard(data) {
-            // 计算总收益
-            data.totalProfit = data.dailyProfit + data.holdingProfit;
+            // 总收益直接使用从每日数据表读取的累计值，不重新计算
             
             // 更新当日收益
             const dailyProfitEl = document.getElementById('daily-profit-value');
