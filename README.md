@@ -33,7 +33,7 @@
 ```bash
 NOTION_TOKEN=your_notion_integration_token
 HOLDINGS_DB_ID=your_holdings_database_id
-TRADES_DB_ID=your_trades_database_id
+DAILY_DATA_DB_ID=your_daily_data_database_id
 ```
 
 ## 🚀 使用方法
@@ -47,7 +47,7 @@ pip install -r requirements.txt
 # 设置环境变量
 export NOTION_TOKEN="your_token"
 export HOLDINGS_DB_ID="your_holdings_db_id"
-export TRADES_DB_ID="your_trades_db_id"
+export DAILY_DATA_DB_ID="your_daily_data_db_id"
 
 # 运行脚本
 python notion_fund_daily_view.py profit  # 计算所有基金收益
@@ -70,16 +70,12 @@ python notion_fund_daily_view.py profit  # 计算所有基金收益
 - `仓位` (Number) - 仓位权重
 - `持有份额` (Number) - 持有份额
 
-### 交易表 (Trades)
+### 每日数据表 (Daily Data)
 必需字段：
-- `Code` (Rich text) - 基金代码
-- `基金名称` (Title/Rich text) - 基金名称
-- `交易类型` (Select) - 买入/卖出
-- `交易金额` (Number) - 交易金额
-- `交易份额` (Number) - 交易份额
-- `交易价格` (Number) - 交易价格
-- `交易日期` (Date) - 交易日期
-- `Fund 持仓` (Relation) - 关联持仓表
+- `日期` (Title) - 记录日期，格式如 @2024-01-15
+- `当日收益` (Number) - 当日收益金额
+- `持仓成本` (Number) - 总持仓成本
+- `总收益` (Number) - 总收益金额
 
 ## 🔧 计算逻辑
 

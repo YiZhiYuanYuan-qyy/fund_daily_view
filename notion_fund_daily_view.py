@@ -24,6 +24,7 @@ import requests
 # ================== 环境变量 ==================
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
 HOLDINGS_DB_ID = os.getenv("HOLDINGS_DB_ID", "").strip()
+DAILY_DATA_DB_ID = os.getenv("DAILY_DATA_DB_ID", "").strip()
 
 # ============== 字段名配置 ==============
 # 持仓表字段
@@ -45,6 +46,12 @@ HOLDING_TOTAL_PROFIT_PROP = "总收益"    # Number
 HOLDING_TOTAL_COST_PROP = "总持仓成本"  # Number
 HOLDING_MARKET_VALUE_PROP = "市值"      # Number
 HOLDING_PROFIT_RATE_PROP = "收益率"     # Number
+
+# 每日数据表字段
+DAILY_DATA_TITLE_PROP = "日期"          # Title
+DAILY_DATA_DAILY_PROFIT_PROP = "当日收益"   # Number
+DAILY_DATA_TOTAL_COST_PROP = "持仓成本"     # Number
+DAILY_DATA_TOTAL_PROFIT_PROP = "总收益"     # Number
 
 # ================== Notion API ==================
 NOTION_HEADERS = {
@@ -248,6 +255,49 @@ def update_holding_profits(holding_id: str, profits: Dict[str, float]) -> None:
     )
 
 
+def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: float, total_profit: float) -> None:
+    """创建或更新每日数据表记录"""
+    if not DAILY_DATA_DB_ID:
+        print("[WARN] 未设置 DAILY_DATA_DB_ID，跳过每日数据记录")
+        return
+    
+    # 检查今日记录是否已存在
+    payload = {
+        "filter": {
+            "property": DAILY_DATA_TITLE_PROP,
+            "title": {"equals": date_str}
+        },
+        "page_size": 1
+    }
+    
+    data = notion_request("POST", f"/databases/{DAILY_DATA_DB_ID}/query", payload)
+    existing = data.get("results") or []
+    
+    props = {
+        DAILY_DATA_TITLE_PROP: {"title": [{"text": {"content": date_str}}]},
+        DAILY_DATA_DAILY_PROFIT_PROP: {"number": daily_profit},
+        DAILY_DATA_TOTAL_COST_PROP: {"number": total_cost},
+        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": total_profit}
+    }
+    
+    if existing:
+        # 更新现有记录
+        page_id = existing[0]["id"]
+        notion_request("PATCH", f"/pages/{page_id}", {"properties": props})
+        print(f"[DAILY] 更新每日数据: {date_str}")
+    else:
+        # 创建新记录
+        notion_request(
+            "POST",
+            "/pages",
+            {
+                "parent": {"database_id": DAILY_DATA_DB_ID},
+                "properties": props
+            }
+        )
+        print(f"[DAILY] 创建每日数据: {date_str}")
+
+
 def update_all_holdings_profits() -> None:
     """更新所有持仓的收益数据"""
     print("开始计算基金收益数据...")
@@ -311,6 +361,18 @@ def update_all_holdings_profits() -> None:
     
     print("="*60)
     print(f"PROFIT Done. updated={updated}, failed={failed}, total={total}")
+    
+    # 记录每日数据
+    today = today_iso_date()
+    try:
+        create_or_update_daily_data(
+            date_str=f"@{today}",
+            daily_profit=round_decimal(summary['total_daily_profit'], 2),
+            total_cost=round_decimal(summary['total_cost'], 2),
+            total_profit=round_decimal(summary['total_profit'], 2)
+        )
+    except Exception as exc:
+        print(f"[ERR] 记录每日数据失败: {exc}")
 
 
 # ================ 主函数 ================
@@ -320,6 +382,8 @@ def main() -> None:
         raise SystemExit("请设置 NOTION_TOKEN")
     if not HOLDINGS_DB_ID:
         raise SystemExit("请设置 HOLDINGS_DB_ID")
+    if not DAILY_DATA_DB_ID:
+        print("[WARN] 未设置 DAILY_DATA_DB_ID，将跳过每日数据记录")
     
     mode = (sys.argv[1] if len(sys.argv) > 1 else "profit").lower()
     
