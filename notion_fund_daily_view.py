@@ -381,6 +381,46 @@ def get_previous_day_total_profit(current_date_str: str) -> float:
         return 0.0
 
 
+def test_date_matching():
+    """测试日期匹配逻辑"""
+    if not TRADES_DB_ID:
+        print("[WARN] 未设置 TRADES_DB_ID，跳过日期匹配测试")
+        return
+    
+    # 测试今天的日期
+    today = datetime.now(SG_TZ).date()
+    test_date_str = f"@{today.isoformat()}"
+    target_date = test_date_str.replace('@', '')
+    
+    print(f"[TEST] 测试日期匹配:")
+    print(f"  每日数据表格式: {test_date_str}")
+    print(f"  流水表查询格式: {target_date}")
+    
+    # 查询流水表
+    payload = {
+        "filter": {
+            "property": TRADES_BUY_DATE_PROP,
+            "date": {"equals": target_date}
+        },
+        "page_size": 5
+    }
+    
+    try:
+        data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", payload)
+        trade_records = data.get("results") or []
+        
+        print(f"[TEST] 查询结果: {len(trade_records)} 条记录")
+        
+        for i, trade in enumerate(trade_records):
+            trade_props = trade.get("properties", {})
+            buy_date_prop = trade_props.get(TRADES_BUY_DATE_PROP, {})
+            buy_date = get_prop_date(buy_date_prop)
+            print(f"[TEST] 记录 {i+1}: 买入日期 = {buy_date}")
+            
+    except Exception as exc:
+        print(f"[TEST] 测试失败: {exc}")
+
+
 def update_daily_trades_relation(date_str: str, daily_data_page_id: str) -> None:
     """更新每日数据的交易记录关联"""
     if not TRADES_DB_ID:
@@ -389,6 +429,8 @@ def update_daily_trades_relation(date_str: str, daily_data_page_id: str) -> None
     
     # 将 @YYYY-MM-DD 格式转换为 YYYY-MM-DD
     target_date = date_str.replace('@', '')
+    
+    print(f"[DEBUG] 查询日期 {target_date} 的交易记录")
     
     # 查询当天的交易记录
     payload = {
@@ -402,6 +444,15 @@ def update_daily_trades_relation(date_str: str, daily_data_page_id: str) -> None
     try:
         data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", payload)
         trade_records = data.get("results") or []
+        
+        print(f"[DEBUG] 查询到 {len(trade_records)} 条交易记录")
+        
+        # 调试：显示前几条交易记录的日期
+        for i, trade in enumerate(trade_records[:3]):
+            trade_props = trade.get("properties", {})
+            buy_date_prop = trade_props.get(TRADES_BUY_DATE_PROP, {})
+            buy_date = get_prop_date(buy_date_prop)
+            print(f"[DEBUG] 交易记录 {i+1}: 买入日期 = {buy_date}")
         
         if not trade_records:
             print(f"[INFO] {date_str} 没有交易记录")
@@ -648,9 +699,11 @@ def main() -> None:
     
     if mode == "profit":
         update_all_holdings_profits()
+    elif mode == "test":
+        test_date_matching()
     else:
         print(f"未知模式: {mode}")
-        print("支持的模式: profit")
+        print("支持的模式: profit, test")
 
 
 if __name__ == "__main__":
