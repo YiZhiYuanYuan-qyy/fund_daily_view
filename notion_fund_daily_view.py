@@ -312,12 +312,14 @@ def get_previous_day_total_profit(current_date_str: str) -> float:
     }
     
     try:
+        print(f"[DEBUG] 查询前一天数据: {previous_date_str}")
         data = notion_request("POST", f"/databases/{DAILY_DATA_DB_ID}/query", payload)
         results = data.get("results") or []
         
         if results:
             props = results[0].get("properties") or {}
             previous_total_profit = get_prop_number(props.get(DAILY_DATA_TOTAL_PROFIT_PROP))
+            print(f"[DEBUG] 找到前一天记录，总收益: {previous_total_profit}")
             return safe_float(previous_total_profit)
         else:
             print(f"[INFO] 未找到前一天({previous_date_str})的记录，总收益从0开始计算")
@@ -342,6 +344,7 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
     
     # 计算累计总收益 = 前一天总收益 + 当日收益
     cumulative_total_profit = previous_total_profit + daily_profit
+    print(f"[DEBUG] 总收益计算: {previous_total_profit} + {daily_profit} = {cumulative_total_profit}")
     
     # 检查今日记录是否已存在
     payload = {
