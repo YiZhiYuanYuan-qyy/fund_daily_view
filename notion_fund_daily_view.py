@@ -39,13 +39,9 @@ HOLDING_QUANTITY_PROP = "持仓份额"      # Number
 
 
 
-# 计算结果字段（持仓表）
-HOLDING_DAILY_PROFIT_PROP = "当日收益"  # Number
-HOLDING_HOLDING_PROFIT_PROP = "持有收益" # Number
-HOLDING_TOTAL_PROFIT_PROP = "总收益"    # Number
-HOLDING_TOTAL_COST_PROP = "总持仓成本"  # Number
-HOLDING_MARKET_VALUE_PROP = "市值"      # Number
-HOLDING_PROFIT_RATE_PROP = "收益率"     # Number
+# 计算结果字段（持仓表 - 从 Notion Formula 读取）
+HOLDING_DAILY_PROFIT_PROP = "当日收益"  # Formula
+HOLDING_HOLDING_PROFIT_PROP = "持有收益" # Formula
 
 # 每日数据表字段
 DAILY_DATA_TITLE_PROP = "日期"          # Title
@@ -244,18 +240,13 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     print(f"  ===== Formula 计算字段 =====")
     print(f"  {debug_prop_value('当日收益', props.get(HOLDING_DAILY_PROFIT_PROP))}")
     print(f"  {debug_prop_value('持有收益', props.get(HOLDING_HOLDING_PROFIT_PROP))}")
-    print(f"  {debug_prop_value('总收益', props.get(HOLDING_TOTAL_PROFIT_PROP))}")
-    print(f"  {debug_prop_value('总持仓成本', props.get(HOLDING_TOTAL_COST_PROP))}")
-    print(f"  {debug_prop_value('市值', props.get(HOLDING_MARKET_VALUE_PROP))}")
-    print(f"  {debug_prop_value('收益率', props.get(HOLDING_PROFIT_RATE_PROP))}")
     
     # 直接读取 Notion 中已计算的 Formula 结果
     daily_profit = safe_float(get_prop_number(props.get(HOLDING_DAILY_PROFIT_PROP)))
     holding_profit = safe_float(get_prop_number(props.get(HOLDING_HOLDING_PROFIT_PROP)))
-    total_profit = safe_float(get_prop_number(props.get(HOLDING_TOTAL_PROFIT_PROP)))
-    total_cost = safe_float(get_prop_number(props.get(HOLDING_TOTAL_COST_PROP)))
-    market_value = safe_float(get_prop_number(props.get(HOLDING_MARKET_VALUE_PROP)))
-    profit_rate = safe_float(get_prop_number(props.get(HOLDING_PROFIT_RATE_PROP)))
+    
+    # 基本数据
+    total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
     
     # 获取基础数据用于显示
     current_price = safe_float(get_prop_number(props.get(HOLDING_GSZ_PROP)))
@@ -265,7 +256,7 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     daily_change_rate = safe_float(get_prop_number(props.get(HOLDING_GSZZL_PROP)))
     quantity = safe_float(get_prop_number(props.get(HOLDING_QUANTITY_PROP)))
     
-    print(f"[DEBUG] 从 Notion Formula 读取: daily={daily_profit} | holding={holding_profit} | total={total_profit} | cost={total_cost}")
+    print(f"[DEBUG] 从 Notion Formula 读取: daily={daily_profit} | holding={holding_profit} | cost={total_cost}")
     
     # 检查数据完整性
     if quantity <= 0:
@@ -273,29 +264,17 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
         return {
             "code": code,
             "name": name,
-            "current_price": 0,
-            "daily_change_rate": 0,
-            "quantity": 0,
             "total_cost": 0,
-            "market_value": 0,
             "daily_profit": 0,
-            "holding_profit": 0,
-            "total_profit": 0,
-            "profit_rate": 0
+            "holding_profit": 0
         }
     
     return {
         "code": code,
         "name": name,
-        "current_price": round_decimal(current_price, 4),
-        "daily_change_rate": round_decimal(daily_change_rate, 2),
-        "quantity": round_decimal(quantity, 2),
         "total_cost": round_decimal(total_cost, 2),
-        "market_value": round_decimal(market_value, 2),
         "daily_profit": round_decimal(daily_profit, 2),
-        "holding_profit": round_decimal(holding_profit, 2),
-        "total_profit": round_decimal(total_profit, 2),
-        "profit_rate": round_decimal(profit_rate, 2)
+        "holding_profit": round_decimal(holding_profit, 2)
     }
 
 
@@ -416,32 +395,27 @@ def update_all_holdings_profits() -> None:
     # 计算汇总数据
     summary = {
         "total_cost": 0.0,
-        "total_market_value": 0.0,
         "total_daily_profit": 0.0,
-        "total_holding_profit": 0.0,
-        "total_profit": 0.0
+        "total_holding_profit": 0.0
     }
     
     for holding in holdings:
         try:
             profits = calculate_fund_profits(holding)
             
-            # 更新持仓数据
+            # 更新持仓数据（现在是空操作）
             update_holding_profits(holding["id"], profits)
             
             # 累计汇总数据
             summary["total_cost"] += profits["total_cost"]
-            summary["total_market_value"] += profits["market_value"]
             summary["total_daily_profit"] += profits["daily_profit"]
             summary["total_holding_profit"] += profits["holding_profit"]
-            summary["total_profit"] += profits["total_profit"]
             
             print(
                 f"[PROFIT] {profits['code']} {profits['name']} | "
                 f"当日: {profits['daily_profit']:+.2f} | "
                 f"持有: {profits['holding_profit']:+.2f} | "
-                f"总收益: {profits['total_profit']:+.2f} | "
-                f"收益率: {profits['profit_rate']:+.2f}%"
+                f"成本: {profits['total_cost']:.2f}"
             )
             
             updated += 1
@@ -455,14 +429,8 @@ def update_all_holdings_profits() -> None:
     print("📊 基金收益汇总")
     print("="*60)
     print(f"总持仓成本: ¥{summary['total_cost']:,.2f}")
-    print(f"总市值: ¥{summary['total_market_value']:,.2f}")
     print(f"当日收益: ¥{summary['total_daily_profit']:+,.2f}")
     print(f"持有收益: ¥{summary['total_holding_profit']:+,.2f}")
-    print(f"总收益: ¥{summary['total_profit']:+,.2f}")
-    
-    if summary['total_cost'] > 0:
-        total_profit_rate = (summary['total_profit'] / summary['total_cost']) * 100
-        print(f"总收益率: {total_profit_rate:+.2f}%")
     
     print("="*60)
     print(f"PROFIT Done. updated={updated}, failed={failed}, total={total}")
