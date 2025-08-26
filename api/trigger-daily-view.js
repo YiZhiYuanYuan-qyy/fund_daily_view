@@ -3,16 +3,8 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     // GET 请求返回看板数据
     try {
-      // 这里应该从 Notion 数据库获取计算好的数据
-      // 暂时返回模拟数据，后续需要连接到您的 Notion 数据库
-      const dashboardData = {
-        dailyProfit: 123.45,
-        holdingProfit: 1234.56,
-        totalProfit: 1357.01,
-        totalCost: 50000.00,
-        updateTime: new Date().toLocaleString('zh-CN')
-      };
-      
+      // 从每日数据表获取最新记录
+      const dashboardData = await fetchLatestDailyData();
       return res.status(200).json(dashboardData);
       
     } catch (error) {
@@ -84,4 +76,111 @@ export default async function handler(req, res) {
   }
   
   return res.status(405).json({ error: 'Method not allowed. Use GET or POST.' });
+}
+
+// 从每日数据表获取最新记录
+async function fetchLatestDailyData() {
+  const NOTION_TOKEN = process.env.NOTION_TOKEN;
+  const DAILY_DATA_DB_ID = process.env.DAILY_DATA_DB_ID;
+  
+  if (!NOTION_TOKEN || !DAILY_DATA_DB_ID) {
+    console.log('Missing NOTION_TOKEN or DAILY_DATA_DB_ID, returning mock data');
+    return {
+      dailyProfit: 0,
+      holdingProfit: 0,
+      totalProfit: 0,
+      totalCost: 0,
+      updateTime: new Date().toLocaleString('zh-CN')
+    };
+  }
+
+  try {
+    // 查询最新的记录（按创建时间排序）
+    const response = await fetch(`https://api.notion.com/v1/databases/${DAILY_DATA_DB_ID}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${NOTION_TOKEN}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sorts: [
+          {
+            timestamp: 'created_time',
+            direction: 'descending'
+          }
+        ],
+        page_size: 1
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Notion API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const results = data.results || [];
+
+    if (results.length === 0) {
+      console.log('No records found in daily data table');
+      return {
+        dailyProfit: 0,
+        holdingProfit: 0,
+        totalProfit: 0,
+        totalCost: 0,
+        updateTime: new Date().toLocaleString('zh-CN')
+      };
+    }
+
+    const record = results[0];
+    const properties = record.properties || {};
+
+    // 提取数据
+    const dailyProfit = getNumberValue(properties['当日收益']) || 0;
+    const totalCost = getNumberValue(properties['持仓成本']) || 0;
+    const totalProfit = getNumberValue(properties['总收益']) || 0;
+    
+    // 持有收益 = 总收益 - 当日收益（这是累计的持有收益）
+    const holdingProfit = totalProfit - dailyProfit;
+
+    // 获取记录的创建时间或日期字段
+    const updateTime = record.created_time ? 
+      new Date(record.created_time).toLocaleString('zh-CN') :
+      new Date().toLocaleString('zh-CN');
+
+    return {
+      dailyProfit: Number(dailyProfit.toFixed(2)),
+      holdingProfit: Number(holdingProfit.toFixed(2)),
+      totalProfit: Number(totalProfit.toFixed(2)),
+      totalCost: Number(totalCost.toFixed(2)),
+      updateTime: updateTime
+    };
+
+  } catch (error) {
+    console.error('Error fetching from Notion:', error);
+    // 返回默认数据而不是抛出错误
+    return {
+      dailyProfit: 0,
+      holdingProfit: 0,
+      totalProfit: 0,
+      totalCost: 0,
+      updateTime: new Date().toLocaleString('zh-CN')
+    };
+  }
+}
+
+// 提取 Notion 数字属性值
+function getNumberValue(property) {
+  if (!property) return null;
+  
+  switch (property.type) {
+    case 'number':
+      return property.number;
+    case 'formula':
+      return property.formula?.number;
+    case 'rollup':
+      return property.rollup?.number;
+    default:
+      return null;
+  }
 }
