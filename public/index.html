@@ -16,32 +16,7 @@
             max-width: 100%;
             margin: 0 auto;
         }
-        .action-bar {
-            text-align: center;
-            margin-bottom: 16px;
-        }
-        .calculate-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-        }
-        .calculate-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        .calculate-button:disabled {
-            background: #cbd5e0;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
+
         .cards-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -134,11 +109,6 @@
         </div>
         
         <div id="dashboard-content" style="display: none;">
-            <div class="action-bar">
-                <button id="calculate-btn" class="calculate-button">
-                    📊 计算收益数据
-                </button>
-            </div>
             <div class="cards-grid">
                 <div class="card daily-profit">
                     <div class="card-header">
@@ -192,12 +162,6 @@
             
             // 每30秒自动刷新一次
             refreshInterval = setInterval(loadDashboardData, 30000);
-            
-            // 绑定计算按钮事件
-            const calculateBtn = document.getElementById('calculate-btn');
-            calculateBtn.addEventListener('click', async function() {
-                await triggerCalculation();
-            });
         });
         
         async function loadDashboardData() {
@@ -284,53 +248,6 @@
             if (value > 0) return 'positive';
             if (value < 0) return 'negative';
             return 'neutral';
-        }
-        
-        async function triggerCalculation() {
-            const calculateBtn = document.getElementById('calculate-btn');
-            
-            try {
-                // 禁用按钮并显示加载状态
-                calculateBtn.disabled = true;
-                calculateBtn.textContent = '🔄 计算中...';
-                
-                const response = await fetch('/api/trigger-daily-view', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        mode: 'profit'
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    calculateBtn.textContent = '✅ 计算成功';
-                    
-                    // 3秒后重新加载数据并恢复按钮
-                    setTimeout(() => {
-                        loadDashboardData();
-                        calculateBtn.textContent = '📊 计算收益数据';
-                        calculateBtn.disabled = false;
-                    }, 3000);
-                } else {
-                    calculateBtn.textContent = '❌ 计算失败';
-                    setTimeout(() => {
-                        calculateBtn.textContent = '📊 计算收益数据';
-                        calculateBtn.disabled = false;
-                    }, 3000);
-                }
-                
-            } catch (error) {
-                console.error('触发计算失败:', error);
-                calculateBtn.textContent = '❌ 网络错误';
-                setTimeout(() => {
-                    calculateBtn.textContent = '📊 计算收益数据';
-                    calculateBtn.disabled = false;
-                }, 3000);
-            }
         }
         
         // 当页面失焦时暂停刷新，聚焦时恢复
