@@ -95,7 +95,11 @@ async function fetchLatestDailyData() {
   }
 
   try {
-    // 查询最新的记录（按创建时间排序）
+    // 获取当天日期，格式为 @YYYY-MM-DD
+    const today = new Date();
+    const todayStr = `@${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    // 查询当天的记录
     const response = await fetch(`https://api.notion.com/v1/databases/${DAILY_DATA_DB_ID}/query`, {
       method: 'POST',
       headers: {
@@ -104,12 +108,12 @@ async function fetchLatestDailyData() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        sorts: [
-          {
-            timestamp: 'created_time',
-            direction: 'descending'
+        filter: {
+          property: '日期',
+          title: {
+            equals: todayStr
           }
-        ],
+        },
         page_size: 1
       })
     });
@@ -122,7 +126,7 @@ async function fetchLatestDailyData() {
     const results = data.results || [];
 
     if (results.length === 0) {
-      console.log('No records found in daily data table, fetching current holdings data');
+      console.log(`No record found for today (${todayStr}), fetching current holdings data`);
       const holdingProfit = await fetchCurrentHoldingProfit();
       return {
         dailyProfit: 0,
