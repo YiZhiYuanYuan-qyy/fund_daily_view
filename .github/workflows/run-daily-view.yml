@@ -30,10 +30,11 @@ jobs:
         pip install -r requirements.txt
         
     - name: Run fund daily view calculation
-      env:
-        NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        HOLDINGS_DB_ID: ${{ secrets.HOLDINGS_DB_ID }}
-        DAILY_DATA_DB_ID: ${{ secrets.DAILY_DATA_DB_ID }}
+              env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          HOLDINGS_DB_ID: ${{ secrets.HOLDINGS_DB_ID }}
+          DAILY_DATA_DB_ID: ${{ secrets.DAILY_DATA_DB_ID }}
+          TRADES_DB_ID: ${{ secrets.TRADES_DB_ID }}
       run: |
         python notion_fund_daily_view.py ${{ github.event.inputs.mode || 'profit' }}
         

@@ -48,6 +48,11 @@ DAILY_DATA_TITLE_PROP = "日期"          # Title
 DAILY_DATA_DAILY_PROFIT_PROP = "当日收益"   # Number
 DAILY_DATA_TOTAL_COST_PROP = "持仓成本"     # Number
 DAILY_DATA_TOTAL_PROFIT_PROP = "总收益"     # Number
+DAILY_DATA_TRADES_RELATION_PROP = "🌊 Fund 流水"  # Relation
+
+# 流水表字段（需要读取）
+TRADES_DB_ID = os.getenv("TRADES_DB_ID")
+TRADES_BUY_DATE_PROP = "买入日期"       # Date
 
 # ================== Notion API ==================
 NOTION_HEADERS = {
@@ -291,6 +296,52 @@ def update_holding_profits(holding_id: str, profits: Dict[str, float]) -> None:
     pass
 
 
+def get_trades_by_date_range(start_date: str, end_date: str) -> List[dict]:
+    """获取指定日期范围内的交易记录"""
+    if not TRADES_DB_ID:
+        print("[WARN] 未设置 TRADES_DB_ID，跳过交易记录查询")
+        return []
+    
+    payload = {
+        "filter": {
+            "and": [
+                {
+                    "property": TRADES_BUY_DATE_PROP,
+                    "date": {"on_or_after": start_date}
+                },
+                {
+                    "property": TRADES_BUY_DATE_PROP,
+                    "date": {"on_or_before": end_date}
+                }
+            ]
+        },
+        "page_size": 100
+    }
+    
+    try:
+        trades = []
+        cursor = None
+        
+        while True:
+            if cursor:
+                payload["start_cursor"] = cursor
+            
+            data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", payload)
+            batch = data.get("results") or []
+            trades.extend(batch)
+            
+            cursor = data.get("next_cursor")
+            if not data.get("has_more"):
+                break
+        
+        print(f"[DEBUG] 获取 {start_date} 到 {end_date} 的交易记录: {len(trades)} 条")
+        return trades
+    
+    except Exception as exc:
+        print(f"[ERR] 查询交易记录失败: {exc}")
+        return []
+
+
 def get_previous_day_total_profit(current_date_str: str) -> float:
     """获取前一天的总收益"""
     if not DAILY_DATA_DB_ID:
@@ -328,6 +379,62 @@ def get_previous_day_total_profit(current_date_str: str) -> float:
     except Exception as exc:
         print(f"[WARN] 获取前一天总收益失败: {exc}")
         return 0.0
+
+
+def update_daily_trades_relation(date_str: str, daily_data_page_id: str) -> None:
+    """更新每日数据的交易记录关联"""
+    if not TRADES_DB_ID:
+        print("[WARN] 未设置 TRADES_DB_ID，跳过交易记录关联")
+        return
+    
+    # 将 @YYYY-MM-DD 格式转换为 YYYY-MM-DD
+    target_date = date_str.replace('@', '')
+    
+    # 查询当天的交易记录
+    payload = {
+        "filter": {
+            "property": TRADES_BUY_DATE_PROP,
+            "date": {"equals": target_date}
+        },
+        "page_size": 100
+    }
+    
+    try:
+        data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", payload)
+        trade_records = data.get("results") or []
+        
+        if not trade_records:
+            print(f"[INFO] {date_str} 没有交易记录")
+            # 清空关联（如果之前有的话）
+            props = {DAILY_DATA_TRADES_RELATION_PROP: {"relation": []}}
+            notion_request("PATCH", f"/pages/{daily_data_page_id}", {"properties": props})
+            return
+        
+        # 获取当前每日数据记录的关联
+        daily_data = notion_request("GET", f"/pages/{daily_data_page_id}")
+        current_relations = daily_data.get("properties", {}).get(DAILY_DATA_TRADES_RELATION_PROP, {}).get("relation", [])
+        current_trade_ids = set(rel["id"] for rel in current_relations)
+        
+        # 获取应该关联的交易记录ID
+        target_trade_ids = set(trade["id"] for trade in trade_records)
+        
+        # 计算需要添加和删除的ID
+        to_add = target_trade_ids - current_trade_ids
+        to_remove = current_trade_ids - target_trade_ids
+        
+        print(f"[DEBUG] {date_str} 交易关联: 当前{len(current_trade_ids)}条, 目标{len(target_trade_ids)}条, 新增{len(to_add)}条, 删除{len(to_remove)}条")
+        
+        # 如果有变化，更新关联
+        if to_add or to_remove:
+            new_relations = [{"id": trade_id} for trade_id in target_trade_ids]
+            props = {DAILY_DATA_TRADES_RELATION_PROP: {"relation": new_relations}}
+            notion_request("PATCH", f"/pages/{daily_data_page_id}", {"properties": props})
+            print(f"[INFO] 更新 {date_str} 的交易关联: {len(target_trade_ids)} 条记录")
+        else:
+            print(f"[INFO] {date_str} 的交易关联无需更新")
+            
+    except Exception as exc:
+        print(f"[ERR] 更新交易关联失败 {date_str}: {exc}")
 
 
 def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: float, previous_total_profit: float) -> None:
@@ -372,7 +479,7 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
         print(f"[DAILY] 更新每日数据: {date_str}")
     else:
         # 创建新记录
-        notion_request(
+        response = notion_request(
             "POST",
             "/pages",
             {
@@ -380,9 +487,71 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
                 "properties": props
             }
         )
+        page_id = response["id"]
         print(f"[DAILY] 创建每日数据: {date_str}")
     
+    # 更新交易记录关联
+    update_daily_trades_relation(date_str, page_id)
+    
     print(f"[DAILY] 累计总收益计算: 前一天({previous_total_profit:+.2f}) + 当日({daily_profit:+.2f}) = {cumulative_total_profit:+.2f}")
+
+
+def update_week_trades_relations() -> None:
+    """更新过去一周的每日数据交易关联"""
+    if not DAILY_DATA_DB_ID or not TRADES_DB_ID:
+        print("[WARN] 缺少必要的数据库ID，跳过一周交易关联更新")
+        return
+    
+    from datetime import datetime, timedelta
+    
+    # 获取过去7天的日期范围
+    today = datetime.now(SG_TZ).date()
+    week_ago = today - timedelta(days=6)  # 包含今天，总共7天
+    
+    print(f"[INFO] 更新 {week_ago} 到 {today} 的交易关联")
+    
+    # 查询这一周的每日数据记录
+    start_date_str = f"@{week_ago.isoformat()}"
+    end_date_str = f"@{today.isoformat()}"
+    
+    payload = {
+        "filter": {
+            "and": [
+                {
+                    "property": DAILY_DATA_TITLE_PROP,
+                    "title": {"starts_with": "@"}
+                }
+            ]
+        },
+        "page_size": 100
+    }
+    
+    try:
+        data = notion_request("POST", f"/databases/{DAILY_DATA_DB_ID}/query", payload)
+        daily_records = data.get("results") or []
+        
+        # 筛选过去一周的记录
+        week_records = []
+        for record in daily_records:
+            title_prop = record.get("properties", {}).get(DAILY_DATA_TITLE_PROP, {})
+            title = get_prop_text(title_prop)
+            if title.startswith('@'):
+                try:
+                    record_date = datetime.fromisoformat(title.replace('@', '')).date()
+                    if week_ago <= record_date <= today:
+                        week_records.append((record, title))
+                except ValueError:
+                    continue
+        
+        print(f"[INFO] 找到过去一周的每日数据记录: {len(week_records)} 条")
+        
+        # 为每条记录更新交易关联
+        for record, date_str in week_records:
+            page_id = record["id"]
+            update_daily_trades_relation(date_str, page_id)
+            
+    except Exception as exc:
+        print(f"[ERR] 批量更新交易关联失败: {exc}")
 
 
 def update_all_holdings_profits() -> None:
@@ -457,6 +626,10 @@ def update_all_holdings_profits() -> None:
             total_cost=round_decimal(summary['total_cost'], 2),
             previous_total_profit=previous_total_profit
         )
+        
+        # 更新过去一周的交易关联
+        update_week_trades_relations()
+        
     except Exception as exc:
         print(f"[ERR] 记录每日数据失败: {exc}")
 
