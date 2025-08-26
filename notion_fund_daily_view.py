@@ -24,7 +24,6 @@ import requests
 # ================== 环境变量 ==================
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
 HOLDINGS_DB_ID = os.getenv("HOLDINGS_DB_ID", "").strip()
-TRADES_DB_ID = os.getenv("TRADES_DB_ID", "").strip()
 
 # ============== 字段名配置 ==============
 # 持仓表字段
@@ -37,15 +36,7 @@ HOLDING_COST_PROP = "持仓成本"          # Number/Formula/Rollup
 HOLDING_POSITION_PROP = "仓位"          # Number
 HOLDING_QUANTITY_PROP = "持有份额"      # Number
 
-# 交易表字段
-TRADE_CODE_PROP = "Code"                # Rich text
-TRADE_NAME_PROP = "基金名称"            # Title/Rich text
-TRADE_TYPE_PROP = "交易类型"            # Select (买入/卖出)
-TRADE_AMOUNT_PROP = "交易金额"          # Number
-TRADE_QUANTITY_PROP = "交易份额"        # Number
-TRADE_PRICE_PROP = "交易价格"           # Number
-TRADE_DATE_PROP = "交易日期"            # Date
-TRADE_RELATION_PROP = "Fund 持仓"       # Relation → 持仓表
+
 
 # 计算结果字段（持仓表）
 HOLDING_DAILY_PROFIT_PROP = "当日收益"  # Number
@@ -182,42 +173,11 @@ def list_holdings_pages() -> List[dict]:
     return pages
 
 
-def list_trades_pages() -> List[dict]:
-    """获取所有交易页面"""
-    pages = []
-    cursor = None
-    while True:
-        payload = {"page_size": 100}
-        if cursor:
-            payload["start_cursor"] = cursor
-        data = notion_request("POST", f"/databases/{TRADES_DB_ID}/query", payload)
-        pages.extend(data.get("results") or [])
-        cursor = data.get("next_cursor")
-        if not data.get("has_more"):
-            break
-    return pages
 
-
-def get_trades_by_code() -> Dict[str, List[dict]]:
-    """按基金代码分组交易记录"""
-    trades = list_trades_pages()
-    trades_by_code = {}
-    
-    for trade in trades:
-        props = trade.get("properties") or {}
-        code = zpad6(get_prop_text(props.get(TRADE_CODE_PROP)))
-        if not code:
-            continue
-            
-        if code not in trades_by_code:
-            trades_by_code[code] = []
-        trades_by_code[code].append(trade)
-    
-    return trades_by_code
 
 
 # ================ 收益计算 ================
-def calculate_fund_profits(holding: dict, trades_by_code: Dict[str, List[dict]]) -> Dict[str, float]:
+def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     """计算单个基金的收益数据"""
     props = holding.get("properties") or {}
     
@@ -234,14 +194,12 @@ def calculate_fund_profits(holding: dict, trades_by_code: Dict[str, List[dict]])
     position = safe_float(get_prop_number(props.get(HOLDING_POSITION_PROP)))
     quantity = safe_float(get_prop_number(props.get(HOLDING_QUANTITY_PROP)))
     
-    # 如果没有持仓数据，从交易记录计算
-    if quantity <= 0 and code in trades_by_code:
-        quantity = calculate_quantity_from_trades(trades_by_code[code])
+    # 持有份额应该通过 Rollup 自动计算，如果为0可能是数据问题
+    if quantity <= 0:
+        print(f"警告: {code} {name} 的持有份额为0，可能需要检查 Rollup 配置")
     
-    # 计算持仓成本
+    # 直接使用持仓表中的持仓成本
     total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
-    if total_cost <= 0 and code in trades_by_code:
-        total_cost = calculate_cost_from_trades(trades_by_code[code])
     
     # 计算收益
     market_value = current_price * quantity
@@ -265,39 +223,10 @@ def calculate_fund_profits(holding: dict, trades_by_code: Dict[str, List[dict]])
     }
 
 
-def calculate_quantity_from_trades(trades: List[dict]) -> float:
-    """从交易记录计算持有份额"""
-    total_quantity = 0.0
-    
-    for trade in trades:
-        props = trade.get("properties") or {}
-        trade_type = get_prop_select(props.get(TRADE_TYPE_PROP))
-        trade_quantity = safe_float(get_prop_number(props.get(TRADE_QUANTITY_PROP)))
-        
-        if trade_type == "买入":
-            total_quantity += trade_quantity
-        elif trade_type == "卖出":
-            total_quantity -= trade_quantity
-    
-    return max(0, total_quantity)
 
 
-def calculate_cost_from_trades(trades: List[dict]) -> float:
-    """从交易记录计算总成本"""
-    total_cost = 0.0
-    
-    for trade in trades:
-        props = trade.get("properties") or {}
-        trade_type = get_prop_select(props.get(TRADE_TYPE_PROP))
-        trade_amount = safe_float(get_prop_number(props.get(TRADE_AMOUNT_PROP)))
-        
-        if trade_type == "买入":
-            total_cost += trade_amount
-        elif trade_type == "卖出":
-            # 卖出时减少成本（简化处理）
-            total_cost -= trade_amount
-    
-    return max(0, total_cost)
+
+
 
 
 # ================ 数据更新 ================
@@ -324,7 +253,6 @@ def update_all_holdings_profits() -> None:
     print("开始计算基金收益数据...")
     
     holdings = list_holdings_pages()
-    trades_by_code = get_trades_by_code()
     
     total = len(holdings)
     updated = 0
@@ -341,7 +269,7 @@ def update_all_holdings_profits() -> None:
     
     for holding in holdings:
         try:
-            profits = calculate_fund_profits(holding, trades_by_code)
+            profits = calculate_fund_profits(holding)
             
             # 更新持仓数据
             update_holding_profits(holding["id"], profits)
@@ -392,8 +320,6 @@ def main() -> None:
         raise SystemExit("请设置 NOTION_TOKEN")
     if not HOLDINGS_DB_ID:
         raise SystemExit("请设置 HOLDINGS_DB_ID")
-    if not TRADES_DB_ID:
-        raise SystemExit("请设置 TRADES_DB_ID")
     
     mode = (sys.argv[1] if len(sys.argv) > 1 else "profit").lower()
     
