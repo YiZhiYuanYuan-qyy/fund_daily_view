@@ -48,7 +48,7 @@ DAILY_DATA_TITLE_PROP = "日期"          # Title
 DAILY_DATA_DAILY_PROFIT_PROP = "当日收益"   # Number
 DAILY_DATA_TOTAL_COST_PROP = "持仓成本"     # Number
 DAILY_DATA_TOTAL_PROFIT_PROP = "总收益"     # Number
-DAILY_DATA_TRADES_RELATION_PROP = "🌊 Fund 流水"  # Relation
+DAILY_DATA_TRADES_RELATION_PROP = "当日购买"  # Relation
 
 # 流水表字段（需要读取）
 TRADES_DB_ID = os.getenv("TRADES_DB_ID")
