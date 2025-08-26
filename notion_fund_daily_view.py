@@ -241,32 +241,48 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     print(f"  {debug_prop_value('估算涨跌幅', props.get(HOLDING_GSZZL_PROP))}")
     print(f"  {debug_prop_value('持仓份额', props.get(HOLDING_QUANTITY_PROP))}")
     print(f"  {debug_prop_value('持仓成本', props.get(HOLDING_COST_PROP))}")
-    print(f"  {debug_prop_value('仓位', props.get(HOLDING_POSITION_PROP))}")
+    print(f"  ===== Formula 计算字段 =====")
+    print(f"  {debug_prop_value('当日收益', props.get(HOLDING_DAILY_PROFIT_PROP))}")
+    print(f"  {debug_prop_value('持有收益', props.get(HOLDING_HOLDING_PROFIT_PROP))}")
+    print(f"  {debug_prop_value('总收益', props.get(HOLDING_TOTAL_PROFIT_PROP))}")
+    print(f"  {debug_prop_value('总持仓成本', props.get(HOLDING_TOTAL_COST_PROP))}")
+    print(f"  {debug_prop_value('市值', props.get(HOLDING_MARKET_VALUE_PROP))}")
+    print(f"  {debug_prop_value('收益率', props.get(HOLDING_PROFIT_RATE_PROP))}")
     
-    # 当前市场数据
+    # 直接读取 Notion 中已计算的 Formula 结果
+    daily_profit = safe_float(get_prop_number(props.get(HOLDING_DAILY_PROFIT_PROP)))
+    holding_profit = safe_float(get_prop_number(props.get(HOLDING_HOLDING_PROFIT_PROP)))
+    total_profit = safe_float(get_prop_number(props.get(HOLDING_TOTAL_PROFIT_PROP)))
+    total_cost = safe_float(get_prop_number(props.get(HOLDING_TOTAL_COST_PROP)))
+    market_value = safe_float(get_prop_number(props.get(HOLDING_MARKET_VALUE_PROP)))
+    profit_rate = safe_float(get_prop_number(props.get(HOLDING_PROFIT_RATE_PROP)))
+    
+    # 获取基础数据用于显示
     current_price = safe_float(get_prop_number(props.get(HOLDING_GSZ_PROP)))
     if current_price <= 0:
         current_price = safe_float(get_prop_number(props.get(HOLDING_DWJZ_PROP)))
     
     daily_change_rate = safe_float(get_prop_number(props.get(HOLDING_GSZZL_PROP)))
-    position = safe_float(get_prop_number(props.get(HOLDING_POSITION_PROP)))
     quantity = safe_float(get_prop_number(props.get(HOLDING_QUANTITY_PROP)))
     
-    # 直接使用持仓表中的持仓成本
-    total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
+    print(f"[DEBUG] 从 Notion Formula 读取: daily={daily_profit} | holding={holding_profit} | total={total_profit} | cost={total_cost}")
     
-    print(f"[DEBUG] 解析结果: price={current_price} | rate={daily_change_rate} | quantity={quantity} | cost={total_cost}")
-    
-    # 持仓份额应该通过 Rollup 自动计算，如果为0可能是数据问题
+    # 检查数据完整性
     if quantity <= 0:
-        print(f"警告: {code} {name} 的持仓份额为0，可能需要检查 Rollup 配置")
-    
-    # 计算收益
-    market_value = current_price * quantity
-    daily_profit = market_value * (daily_change_rate / 100)
-    holding_profit = market_value - total_cost
-    total_profit = daily_profit + holding_profit
-    profit_rate = (holding_profit / total_cost * 100) if total_cost > 0 else 0
+        print(f"警告: {code} {name} 的持仓份额为0，跳过此基金")
+        return {
+            "code": code,
+            "name": name,
+            "current_price": 0,
+            "daily_change_rate": 0,
+            "quantity": 0,
+            "total_cost": 0,
+            "market_value": 0,
+            "daily_profit": 0,
+            "holding_profit": 0,
+            "total_profit": 0,
+            "profit_rate": 0
+        }
     
     return {
         "code": code,
@@ -291,21 +307,9 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
 
 # ================ 数据更新 ================
 def update_holding_profits(holding_id: str, profits: Dict[str, float]) -> None:
-    """更新持仓表的收益数据"""
-    props = {
-        HOLDING_DAILY_PROFIT_PROP: {"number": profits["daily_profit"]},
-        HOLDING_HOLDING_PROFIT_PROP: {"number": profits["holding_profit"]},
-        HOLDING_TOTAL_PROFIT_PROP: {"number": profits["total_profit"]},
-        HOLDING_TOTAL_COST_PROP: {"number": profits["total_cost"]},
-        HOLDING_MARKET_VALUE_PROP: {"number": profits["market_value"]},
-        HOLDING_PROFIT_RATE_PROP: {"number": profits["profit_rate"]},
-    }
-    
-    notion_request(
-        "PATCH",
-        f"/pages/{holding_id}",
-        {"properties": props}
-    )
+    """更新持仓表的收益数据 - 跳过，因为使用 Notion Formula 计算"""
+    # 不再需要更新，因为 Notion 中已经用 Formula 自动计算
+    pass
 
 
 def get_previous_day_total_profit(current_date_str: str) -> float:
