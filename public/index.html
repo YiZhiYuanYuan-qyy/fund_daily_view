@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金日常看板</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+        .dashboard {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .card-icon {
+            font-size: 18px;
+            margin-right: 8px;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+            margin: 0;
+        }
+        .card-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            line-height: 1.2;
+        }
+        .card-change {
+            font-size: 12px;
+            margin-top: 6px;
+            font-weight: 500;
+        }
+        .positive {
+            color: #38a169;
+        }
+        .negative {
+            color: #e53e3e;
+        }
+        .neutral {
+            color: #718096;
+        }
+        .daily-profit { border-left: 4px solid #4299e1; }
+        .holding-profit { border-left: 4px solid #38a169; }
+        .total-profit { border-left: 4px solid #9f7aea; }
+        .total-cost { border-left: 4px solid #ed8936; }
+        .update-time {
+            text-align: center;
+            color: #a0aec0;
+            font-size: 12px;
+            margin-top: 12px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #718096;
+            font-size: 14px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e2e8f0;
+            border-radius: 50%;
+            border-top-color: #4299e1;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            正在加载数据...
+        </div>
+        
+        <div id="dashboard-content" style="display: none;">
+            <div class="cards-grid">
+                <div class="card daily-profit">
+                    <div class="card-header">
+                        <div class="card-icon">📈</div>
+                        <h3 class="card-title">当日收益</h3>
+                    </div>
+                    <div class="card-value" id="daily-profit-value">¥0.00</div>
+                    <div class="card-change" id="daily-profit-change">基于当日涨跌幅计算</div>
+                </div>
+                
+                <div class="card holding-profit">
+                    <div class="card-header">
+                        <div class="card-icon">💰</div>
+                        <h3 class="card-title">持有收益</h3>
+                    </div>
+                    <div class="card-value" id="holding-profit-value">¥0.00</div>
+                    <div class="card-change" id="holding-profit-change">基于持仓成本计算</div>
+                </div>
+                
+                <div class="card total-profit">
+                    <div class="card-header">
+                        <div class="card-icon">🎯</div>
+                        <h3 class="card-title">总收益</h3>
+                    </div>
+                    <div class="card-value" id="total-profit-value">¥0.00</div>
+                    <div class="card-change" id="total-profit-change">当日收益 + 持有收益</div>
+                </div>
+                
+                <div class="card total-cost">
+                    <div class="card-header">
+                        <div class="card-icon">💵</div>
+                        <h3 class="card-title">持仓成本</h3>
+                    </div>
+                    <div class="card-value neutral" id="total-cost-value">¥0.00</div>
+                    <div class="card-change" id="total-cost-change">累计投入成本</div>
+                </div>
+            </div>
+            
+            <div class="update-time" id="update-time">
+                最后更新时间: --
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let refreshInterval;
+        
+        // 页面加载时立即获取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardData();
+            
+            // 每30秒自动刷新一次
+            refreshInterval = setInterval(loadDashboardData, 30000);
+        });
+        
+        async function loadDashboardData() {
+            try {
+                // 这里调用您的数据API获取计算结果
+                // 暂时使用模拟数据
+                const data = await fetchDashboardData();
+                updateDashboard(data);
+                
+                // 隐藏加载界面，显示看板
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('dashboard-content').style.display = 'block';
+                
+            } catch (error) {
+                console.error('获取数据失败:', error);
+                // 可以显示错误状态
+            }
+        }
+        
+        async function fetchDashboardData() {
+            try {
+                const response = await fetch('/api/trigger-daily-view', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data;
+                
+            } catch (error) {
+                console.error('获取数据失败:', error);
+                // 如果API失败，返回默认数据
+                return {
+                    dailyProfit: 0,
+                    holdingProfit: 0,
+                    totalProfit: 0,
+                    totalCost: 0,
+                    updateTime: new Date().toLocaleString('zh-CN')
+                };
+            }
+        }
+        
+        function updateDashboard(data) {
+            // 计算总收益
+            data.totalProfit = data.dailyProfit + data.holdingProfit;
+            
+            // 更新当日收益
+            const dailyProfitEl = document.getElementById('daily-profit-value');
+            dailyProfitEl.textContent = formatCurrency(data.dailyProfit);
+            dailyProfitEl.className = `card-value ${getChangeClass(data.dailyProfit)}`;
+            
+            // 更新持有收益
+            const holdingProfitEl = document.getElementById('holding-profit-value');
+            holdingProfitEl.textContent = formatCurrency(data.holdingProfit);
+            holdingProfitEl.className = `card-value ${getChangeClass(data.holdingProfit)}`;
+            
+            // 更新总收益
+            const totalProfitEl = document.getElementById('total-profit-value');
+            totalProfitEl.textContent = formatCurrency(data.totalProfit);
+            totalProfitEl.className = `card-value ${getChangeClass(data.totalProfit)}`;
+            
+            // 更新持仓成本
+            document.getElementById('total-cost-value').textContent = formatCurrency(data.totalCost);
+            
+            // 更新时间
+            document.getElementById('update-time').textContent = `最后更新时间: ${data.updateTime}`;
+        }
+        
+        function formatCurrency(value) {
+            const prefix = value >= 0 ? '+' : '';
+            return prefix + '¥' + Math.abs(value).toLocaleString('zh-CN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+        
+        function getChangeClass(value) {
+            if (value > 0) return 'positive';
+            if (value < 0) return 'negative';
+            return 'neutral';
+        }
+        
+        // 当页面失焦时暂停刷新，聚焦时恢复
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                clearInterval(refreshInterval);
+            } else {
+                loadDashboardData();
+                refreshInterval = setInterval(loadDashboardData, 30000);
+            }
+        });
+    </script>
+</body>
+</html>

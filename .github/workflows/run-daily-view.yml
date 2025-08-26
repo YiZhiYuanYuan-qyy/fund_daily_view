@@ -1,0 +1,46 @@
+name: Run Fund Daily View
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '运行模式'
+        required: true
+        default: 'profit'
+        type: choice
+        options:
+          - profit
+  schedule:
+    # 每天下午3点运行（交易结束后）
+    - cron: '0 15 * * 1-5'
+
+jobs:
+  calculate-profits:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run fund daily view calculation
+      env:
+        NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        HOLDINGS_DB_ID: ${{ secrets.HOLDINGS_DB_ID }}
+        TRADES_DB_ID: ${{ secrets.TRADES_DB_ID }}
+      run: |
+        python notion_fund_daily_view.py ${{ github.event.inputs.mode || 'profit' }}
+        
+    - name: Notify completion
+      if: always()
+      run: |
+        echo "Fund daily view calculation completed for mode: ${{ github.event.inputs.mode || 'profit' }}"
