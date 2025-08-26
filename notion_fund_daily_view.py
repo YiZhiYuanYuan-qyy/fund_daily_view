@@ -124,6 +124,32 @@ def get_prop_number(prop: dict) -> Optional[float]:
     return None
 
 
+def debug_prop_value(prop_name: str, prop: dict) -> str:
+    """调试属性值"""
+    if not prop:
+        return f"{prop_name}: None"
+    
+    prop_type = prop.get("type", "unknown")
+    if prop_type == "number":
+        value = prop.get("number")
+    elif prop_type == "formula":
+        formula = prop.get("formula") or {}
+        value = f"formula({formula.get('type')}: {formula.get('number')})"
+    elif prop_type == "rollup":
+        rollup = prop.get("rollup") or {}
+        value = f"rollup({rollup.get('type')}: {rollup.get('number') if rollup.get('type') == 'number' else rollup.get('array', [])})"
+    elif prop_type == "rich_text":
+        rich_text = prop.get("rich_text") or []
+        value = "".join(item.get("plain_text", "") for item in rich_text)
+    elif prop_type == "title":
+        title = prop.get("title") or []
+        value = "".join(item.get("plain_text", "") for item in title)
+    else:
+        value = f"{prop_type}: {prop}"
+    
+    return f"{prop_name}({prop_type}): {value}"
+
+
 def get_prop_date(prop: dict) -> Optional[str]:
     """从 Notion 属性中提取日期"""
     if not prop:
@@ -208,6 +234,15 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
         print(f"[DEBUG] 可用字段: {list(props.keys())}")
         calculate_fund_profits._debug_printed = True
     
+    # 打印关键字段的详细信息
+    print(f"[DEBUG] {code} {name}")
+    print(f"  {debug_prop_value('估算净值', props.get(HOLDING_GSZ_PROP))}")
+    print(f"  {debug_prop_value('单位净值', props.get(HOLDING_DWJZ_PROP))}")
+    print(f"  {debug_prop_value('估算涨跌幅', props.get(HOLDING_GSZZL_PROP))}")
+    print(f"  {debug_prop_value('持仓份额', props.get(HOLDING_QUANTITY_PROP))}")
+    print(f"  {debug_prop_value('持仓成本', props.get(HOLDING_COST_PROP))}")
+    print(f"  {debug_prop_value('仓位', props.get(HOLDING_POSITION_PROP))}")
+    
     # 当前市场数据
     current_price = safe_float(get_prop_number(props.get(HOLDING_GSZ_PROP)))
     if current_price <= 0:
@@ -220,7 +255,7 @@ def calculate_fund_profits(holding: dict) -> Dict[str, float]:
     # 直接使用持仓表中的持仓成本
     total_cost = safe_float(get_prop_number(props.get(HOLDING_COST_PROP)))
     
-    print(f"[DEBUG] {code} {name} | price={current_price} | rate={daily_change_rate} | quantity={quantity} | cost={total_cost}")
+    print(f"[DEBUG] 解析结果: price={current_price} | rate={daily_change_rate} | quantity={quantity} | cost={total_cost}")
     
     # 持仓份额应该通过 Rollup 自动计算，如果为0可能是数据问题
     if quantity <= 0:
