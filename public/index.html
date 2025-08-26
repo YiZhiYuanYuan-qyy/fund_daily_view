@@ -51,7 +51,7 @@
             margin: 0;
         }
         .card-value {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 700;
             margin: 0;
             line-height: 1.2;
@@ -237,8 +237,8 @@
         }
         
         function formatCurrency(value) {
-            const prefix = value >= 0 ? '+' : '';
-            return prefix + '¥' + Math.abs(value).toLocaleString('zh-CN', {
+            const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+            return sign + '¥' + Math.abs(value).toLocaleString('zh-CN', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
