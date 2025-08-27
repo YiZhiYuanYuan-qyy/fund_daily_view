@@ -48,7 +48,7 @@ DAILY_DATA_TITLE_PROP = "日期"          # Title
 DAILY_DATA_DAILY_PROFIT_PROP = "当日收益"   # Number
 DAILY_DATA_TOTAL_COST_PROP = "持仓成本"     # Number
 DAILY_DATA_TOTAL_PROFIT_PROP = "总收益"     # Number
-DAILY_DATA_TRADES_RELATION_PROP = "当日操作"  # Relation
+DAILY_DATA_TRADES_RELATION_PROP = "当日操作relation"  # Relation
 
 # 流水表字段（需要读取）
 TRADES_DB_ID = os.getenv("TRADES_DB_ID")
@@ -588,8 +588,7 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
         DAILY_DATA_TITLE_PROP: {"title": [{"text": {"content": date_str}}]},
         DAILY_DATA_DAILY_PROFIT_PROP: {"number": daily_profit},
         DAILY_DATA_TOTAL_COST_PROP: {"number": total_cost},
-        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": cumulative_total_profit},
-        DAILY_DATA_TRADES_RELATION_PROP: {"relation": []}  # 初始化当日操作关联字段
+        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": cumulative_total_profit}
     }
     
     if existing:
