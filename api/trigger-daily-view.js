@@ -127,9 +127,9 @@ async function fetchLatestDailyData() {
 
     if (results.length === 0) {
       console.log(`No record found for today (${todayStr}), fetching current holdings data`);
-      const holdingProfit = await fetchCurrentHoldingProfit();
+      const { holdingProfit, currentDailyProfit } = await fetchCurrentHoldingsData();
       return {
-        dailyProfit: 0,
+        dailyProfit: currentDailyProfit,
         holdingProfit: holdingProfit,
         totalProfit: 0,
         totalCost: 0,
@@ -145,8 +145,11 @@ async function fetchLatestDailyData() {
     const totalCost = getNumberValue(properties['持仓成本']) || 0;
     const totalProfit = getNumberValue(properties['总收益']) || 0;
     
-    // 从持仓表获取真实的持有收益
-    const holdingProfit = await fetchCurrentHoldingProfit();
+    // 从持仓表获取真实的持有收益和当日收益
+    const { holdingProfit, currentDailyProfit } = await fetchCurrentHoldingsData();
+    
+    // 优先使用持仓表的实时数据
+    const finalDailyProfit = currentDailyProfit !== 0 ? currentDailyProfit : dailyProfit;
 
     // 获取记录的创建时间或日期字段
     const updateTime = record.created_time ? 
@@ -154,7 +157,7 @@ async function fetchLatestDailyData() {
       new Date().toLocaleString('zh-CN');
 
     return {
-      dailyProfit: Number(dailyProfit.toFixed(2)),
+      dailyProfit: Number(finalDailyProfit.toFixed(2)),
       holdingProfit: Number(holdingProfit.toFixed(2)),
       totalProfit: Number(totalProfit.toFixed(2)),
       totalCost: Number(totalCost.toFixed(2)),
@@ -163,18 +166,18 @@ async function fetchLatestDailyData() {
 
   } catch (error) {
     console.error('Error fetching from Notion:', error);
-    // 尝试至少获取持有收益
+    // 尝试至少获取持仓数据
     try {
-      const holdingProfit = await fetchCurrentHoldingProfit();
+      const { holdingProfit, currentDailyProfit } = await fetchCurrentHoldingsData();
       return {
-        dailyProfit: 0,
+        dailyProfit: currentDailyProfit,
         holdingProfit: holdingProfit,
         totalProfit: 0,
         totalCost: 0,
         updateTime: new Date().toLocaleString('zh-CN')
       };
     } catch (holdingError) {
-      console.error('Error fetching holding profit as fallback:', holdingError);
+      console.error('Error fetching holdings data as fallback:', holdingError);
       return {
         dailyProfit: 0,
         holdingProfit: 0,
@@ -186,18 +189,19 @@ async function fetchLatestDailyData() {
   }
 }
 
-// 从持仓表获取当前持有收益
-async function fetchCurrentHoldingProfit() {
+// 从持仓表获取当前持有收益和当日收益
+async function fetchCurrentHoldingsData() {
   const NOTION_TOKEN = process.env.NOTION_TOKEN;
   const HOLDINGS_DB_ID = process.env.HOLDINGS_DB_ID;
   
   if (!NOTION_TOKEN || !HOLDINGS_DB_ID) {
     console.log('Missing NOTION_TOKEN or HOLDINGS_DB_ID for holdings data');
-    return 0;
+    return { holdingProfit: 0, currentDailyProfit: 0 };
   }
 
   try {
     let totalHoldingProfit = 0;
+    let totalDailyProfit = 0;
     let cursor = null;
     
     do {
@@ -236,17 +240,24 @@ async function fetchCurrentHoldingProfit() {
           // 获取持有收益
           const holdingProfit = getNumberValue(properties['持有收益']) || 0;
           totalHoldingProfit += holdingProfit;
+          
+          // 获取当日收益
+          const dailyProfit = getNumberValue(properties['当日收益']) || 0;
+          totalDailyProfit += dailyProfit;
         }
       }
 
       cursor = data.next_cursor;
     } while (cursor);
 
-    return Number(totalHoldingProfit.toFixed(2));
+    return {
+      holdingProfit: Number(totalHoldingProfit.toFixed(2)),
+      currentDailyProfit: Number(totalDailyProfit.toFixed(2))
+    };
 
   } catch (error) {
-    console.error('Error fetching holding profit:', error);
-    return 0;
+    console.error('Error fetching holdings data:', error);
+    return { holdingProfit: 0, currentDailyProfit: 0 };
   }
 }
 
