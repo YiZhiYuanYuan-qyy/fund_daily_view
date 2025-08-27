@@ -342,6 +342,52 @@ def get_trades_by_date_range(start_date: str, end_date: str) -> List[dict]:
         return []
 
 
+def get_latest_daily_profit_from_holdings() -> float:
+    """从持仓表获取最新的当日收益总和"""
+    if not HOLDINGS_DB_ID:
+        print("[WARN] 未设置 HOLDINGS_DB_ID，无法获取持仓数据")
+        return 0.0
+    
+    try:
+        print("[DEBUG] 从持仓表读取最新当日收益总和...")
+        
+        total_daily_profit = 0.0
+        cursor = None
+        
+        while True:
+            payload = {
+                "page_size": 100
+            }
+            
+            if cursor:
+                payload["start_cursor"] = cursor
+            
+            data = notion_request("POST", f"/databases/{HOLDINGS_DB_ID}/query", payload)
+            results = data.get("results") or []
+            
+            for holding in results:
+                props = holding.get("properties") or {}
+                
+                # 检查持仓份额是否大于0
+                quantity = safe_float(get_prop_number(props.get(HOLDING_QUANTITY_PROP)))
+                if quantity > 0:
+                    # 获取当日收益
+                    daily_profit = safe_float(get_prop_number(props.get(HOLDING_DAILY_PROFIT_PROP)))
+                    total_daily_profit += daily_profit
+            
+            # 检查是否有下一页
+            cursor = data.get("next_cursor")
+            if not cursor:
+                break
+        
+        print(f"[DEBUG] 持仓表当日收益总和: {total_daily_profit:.2f}")
+        return total_daily_profit
+        
+    except Exception as exc:
+        print(f"[ERR] 获取持仓表当日收益总和失败: {exc}")
+        return 0.0
+
+
 def get_previous_day_total_profit(current_date_str: str) -> float:
     """获取前一天的总收益"""
     if not DAILY_DATA_DB_ID:
@@ -687,15 +733,19 @@ def update_all_holdings_profits() -> None:
         # 获取前一天的总收益
         previous_total_profit = get_previous_day_total_profit(today_str)
         
+        # 直接从持仓表重新读取最新的当日收益总和，确保数据一致性
+        latest_daily_profit = get_latest_daily_profit_from_holdings()
+        
         print(f"[DEBUG] 准备写入每日数据:")
         print(f"  日期: {today_str}")
-        print(f"  当日收益: {summary['total_daily_profit']}")
+        print(f"  当日收益(持仓表): {latest_daily_profit}")
+        print(f"  当日收益(汇总): {summary['total_daily_profit']}")
         print(f"  持仓成本: {summary['total_cost']}")
         print(f"  前一天总收益: {previous_total_profit}")
         
         create_or_update_daily_data(
             date_str=today_str,
-            daily_profit=round_decimal(summary['total_daily_profit'], 2),
+            daily_profit=round_decimal(latest_daily_profit, 2),
             total_cost=round_decimal(summary['total_cost'], 2),
             previous_total_profit=previous_total_profit
         )
