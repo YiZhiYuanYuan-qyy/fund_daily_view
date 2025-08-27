@@ -588,7 +588,8 @@ def create_or_update_daily_data(date_str: str, daily_profit: float, total_cost: 
         DAILY_DATA_TITLE_PROP: {"title": [{"text": {"content": date_str}}]},
         DAILY_DATA_DAILY_PROFIT_PROP: {"number": daily_profit},
         DAILY_DATA_TOTAL_COST_PROP: {"number": total_cost},
-        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": cumulative_total_profit}
+        DAILY_DATA_TOTAL_PROFIT_PROP: {"number": cumulative_total_profit},
+        DAILY_DATA_TRADES_RELATION_PROP: {"relation": []}  # 初始化当日操作关联字段
     }
     
     if existing:
