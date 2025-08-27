@@ -128,6 +128,13 @@ async function fetchLatestDailyData() {
     if (results.length === 0) {
       console.log(`No record found for today (${todayStr}), fetching current holdings data`);
       const { holdingProfit, currentDailyProfit } = await fetchCurrentHoldingsData();
+      
+      // 如果没有找到当天记录，尝试创建一条新记录
+      if (currentDailyProfit !== 0) {
+        console.log(`Creating new daily data record for today with 当日收益: ${currentDailyProfit}`);
+        await createDailyDataRecord(todayStr, currentDailyProfit, 0, 0);
+      }
+      
       return {
         dailyProfit: currentDailyProfit,
         holdingProfit: holdingProfit,
@@ -150,6 +157,12 @@ async function fetchLatestDailyData() {
     
     // 优先使用持仓表的实时数据
     const finalDailyProfit = currentDailyProfit !== 0 ? currentDailyProfit : dailyProfit;
+
+    // 如果持仓表的当日收益与每日数据表不一致，则更新每日数据表
+    if (Math.abs(finalDailyProfit - dailyProfit) > 0.01) {
+      console.log(`Updating daily data table: 持仓表当日收益(${finalDailyProfit}) vs 每日数据表(${dailyProfit})`);
+      await updateDailyDataTable(record.id, finalDailyProfit, totalCost, totalProfit);
+    }
 
     // 获取记录的创建时间或日期字段
     const updateTime = record.created_time ? 
@@ -186,6 +199,103 @@ async function fetchLatestDailyData() {
         updateTime: new Date().toLocaleString('zh-CN')
       };
     }
+  }
+}
+
+// 创建每日数据记录
+async function createDailyDataRecord(dateStr, dailyProfit, totalCost, totalProfit) {
+  const NOTION_TOKEN = process.env.NOTION_TOKEN;
+  const DAILY_DATA_DB_ID = process.env.DAILY_DATA_DB_ID;
+  
+  if (!NOTION_TOKEN || !DAILY_DATA_DB_ID) {
+    console.log('Missing NOTION_TOKEN or DAILY_DATA_DB_ID, cannot create daily data record');
+    return false;
+  }
+
+  try {
+    const response = await fetch(`https://api.notion.com/v1/pages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${NOTION_TOKEN}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        parent: {
+          database_id: DAILY_DATA_DB_ID
+        },
+        properties: {
+          '日期': {
+            title: [
+              {
+                text: {
+                  content: dateStr
+                }
+              }
+            ]
+          },
+          '当日收益': {
+            number: dailyProfit
+          },
+          '持仓成本': {
+            number: totalCost
+          },
+          '总收益': {
+            number: totalProfit
+          }
+        }
+      })
+    });
+
+    if (response.ok) {
+      console.log(`Successfully created daily data record for ${dateStr} with 当日收益: ${dailyProfit}`);
+      return true;
+    } else {
+      console.error(`Failed to create daily data record: ${response.status}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error creating daily data record:', error);
+    return false;
+  }
+}
+
+// 更新每日数据表
+async function updateDailyDataTable(pageId, dailyProfit, totalCost, totalProfit) {
+  const NOTION_TOKEN = process.env.NOTION_TOKEN;
+  
+  if (!NOTION_TOKEN) {
+    console.log('Missing NOTION_TOKEN, cannot update daily data table');
+    return false;
+  }
+
+  try {
+    const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${NOTION_TOKEN}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        properties: {
+          '当日收益': {
+            number: dailyProfit
+          }
+        }
+      })
+    });
+
+    if (response.ok) {
+      console.log(`Successfully updated daily data table with 当日收益: ${dailyProfit}`);
+      return true;
+    } else {
+      console.error(`Failed to update daily data table: ${response.status}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error updating daily data table:', error);
+    return false;
   }
 }
 
